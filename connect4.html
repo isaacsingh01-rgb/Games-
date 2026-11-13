@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Connect 4</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{--cs:60px}
+body{margin:0;background:#0f172a;color:#e2e8f0;font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;padding:12px;user-select:none;overflow-x:hidden}
+.bar{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:10px}
+select,button{background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:8px;padding:8px 12px;font-size:15px;cursor:pointer;transition:transform .12s,filter .15s}
+button:hover{filter:brightness(1.2)}button:active{transform:scale(.94)}
+#score{display:flex;gap:10px;margin-bottom:6px;font-weight:700}
+.chip{padding:4px 12px;border-radius:999px;background:#1e293b;display:inline-flex;gap:6px;align-items:center;font-variant-numeric:tabular-nums}
+.chip i{width:12px;height:12px;border-radius:50%;display:inline-block}
+.r{background:#ef4444}.y{background:#facc15}.d{background:#94a3b8}
+#status{height:28px;font-weight:700;font-size:18px;margin:4px 0 2px;display:flex;align-items:center}
+#wrap{position:relative;width:calc(var(--cs)*7);cursor:pointer}
+#pv{position:relative;height:var(--cs)}
+#ghost{position:absolute;top:0;left:0;width:var(--cs);height:var(--cs);transition:left .11s ease-out,opacity .15s;opacity:0;pointer-events:none}
+#bd{position:relative;width:calc(var(--cs)*7);height:calc(var(--cs)*6)}
+#discs{position:absolute;inset:0}
+#face{position:absolute;inset:0;display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:repeat(6,1fr);border-radius:14px;overflow:hidden;pointer-events:none;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+#face div{background:radial-gradient(circle closest-side at 50% 50%,transparent 79%,#1d4ed8 81%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.05)}
+.disc{position:absolute;width:var(--cs);height:var(--cs)}
+.disc::before{content:"";position:absolute;inset:11%;border-radius:50%}
+.disc::after{content:"";position:absolute;inset:22%;border-radius:50%;border:2px solid rgba(0,0,0,.14);box-shadow:inset 0 2px 3px rgba(255,255,255,.25)}
+.p1::before{background:radial-gradient(circle at 35% 30%,#fecaca,#ef4444 45%,#b91c1c)}
+.p2::before{background:radial-gradient(circle at 35% 30%,#fef9c3,#facc15 45%,#ca8a04)}
+.disc.win::before{box-shadow:0 0 18px 6px rgba(255,255,255,.85);animation:pulse .7s ease-in-out infinite alternate}
+@keyframes pulse{from{transform:scale(1)}to{transform:scale(1.1)}}
+.hint{opacity:.6;font-size:13px;margin-top:10px;text-align:center}
+</style></head><body>
+<div class="bar">
+<select id="mode"><option value="cpu">vs Computer</option><option value="two">2 Players</option></select>
+<select id="diff"><option value="easy">Easy</option><option value="med" selected>Medium</option><option value="hard">Hard</option></select>
+<select id="first"><option value="you">You go first</option><option value="cpu">Computer first</option></select>
+<button id="ng">New game</button>
+</div>
+<div id="score"><span class="chip"><i class="r"></i><span id="s1">0</span></span><span class="chip"><i class="d"></i><span id="sd">0</span></span><span class="chip"><i class="y"></i><span id="s2">0</span></span></div>
+<div id="status"></div>
+<div id="wrap"><div id="pv"><div id="ghost" class="disc"></div></div><div id="bd"><div id="discs"></div><div id="face"></div></div></div>
+<div class="hint">Tap / click a column · ← → and Enter on keyboard</div>
+<script>
+const RM=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const R=6,C=7,ORDER=[3,2,4,1,5,0,6];
+const $=id=>document.getElementById(id);
+const wrap=$('wrap'),discs=$('discs'),ghost=$('ghost'),face=$('face'),statusEl=$('status');
+for(let i=0;i<R*C;i++)face.appendChild(document.createElement('div'));
+let CS=60,grid,turn,busy,over,els,col=3,human=1,tally={1:0,2:0,d:0},token=0;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function size(){CS=Math.max(36,Math.min(72,Math.floor((innerWidth-28)/7)));document.documentElement.style.setProperty('--cs',CS+'px')}
+addEventListener('resize',size);size();
+const mode=()=>$('mode').value,isAI=p=>mode()==='cpu'&&p!==human;
+function newGame(){
+ token++;grid=Array.from({length:R},()=>Array(C).fill(0));els=Array.from({length:R},()=>Array(C).fill(null));
+ discs.innerHTML='';over=false;busy=false;turn=1;
+ human=mode()==='cpu'&&$('first').value==='cpu'?2:1;
+ $('first').style.display=mode()==='cpu'?'':'none';$('diff').style.display=mode()==='cpu'?'':'none';
+ ghostUpdate();setStatus();
+ if(isAI(turn))aiMove();
+}
+function name(p){return mode()==='cpu'?(p===human?'You':'Computer'):(p===1?'Red':'Yellow')}
+function setStatus(msg){
+ const t=msg||(over?'':isAI(turn)?'Computer is thinking…':(mode()==='cpu'?'Your turn':(turn===1?'Red':'Yellow')+'’s turn'));
+ if(statusEl.textContent===t)return;statusEl.textContent=t;
+ if(!RM)statusEl.animate([{opacity:0,transform:'translateY(5px)'},{opacity:1,transform:'translateY(0)'}],{duration:220});
+}
+function ghostUpdate(){
+ ghost.className='disc p'+turn;ghost.style.left=`calc(var(--cs)*${col})`;
+ ghost.style.opacity=(!busy&&!over&&!isAI(turn))?.55:0;
+}
+function dropRow(g,c){for(let r=R-1;r>=0;r--)if(!g[r][c])return r;return -1}
+function winLine(g,r,c,p){
+ for(const [dr,dc] of [[0,1],[1,0],[1,1],[1,-1]]){
+  const cells=[[r,c]];
+  for(const s of [1,-1]){let rr=r+dr*s,cc=c+dc*s;while(rr>=0&&rr<R&&cc>=0&&cc<C&&g[rr][cc]===p){cells.push([rr,cc]);rr+=dr*s;cc+=dc*s}}
+  if(cells.length>=4)return cells;
+ }
+ return null;
+}
+async function play(c){
+ if(busy||over)return;const r=dropRow(grid,c);
+ if(r<0){if(!RM)ghost.animate([{transform:'translateX(0)'},{transform:'translateX(-6px)'},{transform:'translateX(6px)'},{transform:'translateX(0)'}],{duration:200});return}
+ const my=token,p=turn;busy=true;col=c;grid[r][c]=p;ghostUpdate();
+ const d=document.createElement('div');d.className='disc p'+p;d.style.left=`calc(var(--cs)*${c})`;d.style.top=`calc(var(--cs)*${r})`;
+ discs.appendChild(d);els[r][c]=d;
+ if(!RM){const dist=(r+1)*CS,dur=260+r*38+(5-r)*0;
+  const a=d.animate([
+   {transform:`translateY(${-dist}px)`,easing:'cubic-bezier(.5,0,.9,.5)'},
+   {transform:'translateY(0)',offset:.6,easing:'cubic-bezier(.1,.5,.4,1)'},
+   {transform:`translateY(${-Math.min(18,CS*.28)}px)`,offset:.76,easing:'cubic-bezier(.5,0,.9,.5)'},
+   {transform:'translateY(0)',offset:.88,easing:'cubic-bezier(.1,.5,.4,1)'},
+   {transform:`translateY(${-Math.min(5,CS*.08)}px)`,offset:.94,easing:'cubic-bezier(.5,0,.9,.5)'},
+   {transform:'translateY(0)'}],{duration:dur*1.9,fill:'backwards'});
+  await a.finished.catch(()=>{});}
+ if(my!==token)return;
+ const w=winLine(grid,r,c,p);
+ if(w){over=true;busy=false;tally[p]++;w.forEach(([rr,cc])=>els[rr][cc].classList.add('win'));
+  setStatus((mode()==='cpu'?(p===human?'You win! 🎉':'Computer wins'):(p===1?'Red':'Yellow')+' wins! 🎉'));
+  if(!RM)statusEl.animate([{transform:'scale(.7)'},{transform:'scale(1.15)'},{transform:'scale(1)'}],{duration:420,easing:'ease-out'});
+  tallyUpdate(p);ghostUpdate();return}
+ if(grid[0].every(v=>v)){over=true;busy=false;tally.d++;setStatus('Draw');tallyUpdate('d');ghostUpdate();return}
+ turn=3-p;busy=false;setStatus();ghostUpdate();
+ if(isAI(turn))aiMove();
+}
+function tallyUpdate(k){$('s1').textContent=tally[1];$('s2').textContent=tally[2];$('sd').textContent=tally.d;
+ const el={1:$('s1'),2:$('s2'),d:$('sd')}[k];if(!RM)el.animate([{transform:'scale(1)'},{transform:'scale(1.5)'},{transform:'scale(1)'}],{duration:320})}
+// ---------- AI ----------
+function evalWin(w,p){let a=0,b=0,e=0;for(const v of w){v===p?a++:v?b++:e++}
+ if(a&&b)return 0;if(a===3)return 6;if(a===2)return 2;if(b===3)return -7;if(b===2)return -2;return 0}
+function evalB(g,p){
+ let s=0;for(let r=0;r<R;r++)if(g[r][3]===p)s+=3;else if(g[r][3])s-=3;
+ for(let r=0;r<R;r++)for(let c=0;c<C;c++)for(const [dr,dc] of [[0,1],[1,0],[1,1],[1,-1]]){
+  const r2=r+dr*3,c2=c+dc*3;if(r2<0||r2>=R||c2<0||c2>=C)continue;
+  s+=evalWin([g[r][c],g[r+dr][c+dc],g[r+dr*2][c+dc*2],g[r2][c2]],p)}
+ return s;
+}
+function negamax(g,d,a,b,p,last){
+ if(last&&winLine(g,last[0],last[1],3-p))return -(1e6+d);
+ if(d===0)return evalB(g,p);
+ let best=-Infinity,any=false;
+ for(const c of ORDER){const r=dropRow(g,c);if(r<0)continue;any=true;g[r][c]=p;
+  const v=-negamax(g,d-1,-b,-a,3-p,[r,c]);g[r][c]=0;
+  if(v>best)best=v;if(best>a)a=best;if(a>=b)break}
+ return any?best:0;
+}
+function chooseCol(){
+ const me=turn,depth={easy:2,med:4,hard:7}[$('diff').value];
+ const valid=ORDER.filter(c=>dropRow(grid,c)>=0);
+ if($('diff').value==='easy'&&Math.random()<.25)return valid[Math.floor(Math.random()*valid.length)];
+ const g=grid.map(r=>r.slice());let best=-Infinity,bc=valid[0];
+ for(const c of valid){const r=dropRow(g,c);g[r][c]=me;
+  const v=winLine(g,r,c,me)?1e7:-negamax(g,depth-1,-Infinity,Infinity,3-me,[r,c])+Math.random()*.4;
+  g[r][c]=0;if(v>best){best=v;bc=c}}
+ return bc;
+}
+async function aiMove(){
+ const my=token;setStatus();ghostUpdate();
+ await sleep(RM?0:420);if(my!==token||over)return;
+ play(chooseCol());
+}
+// ---------- input ----------
+function colFromEvent(e){const rect=wrap.getBoundingClientRect(),x=(e.touches?e.touches[0].clientX:e.clientX)-rect.left;return Math.max(0,Math.min(C-1,Math.floor(x/CS)))}
+wrap.addEventListener('pointermove',e=>{if(e.pointerType==='touch')return;col=colFromEvent(e);ghostUpdate()});
+wrap.addEventListener('pointerdown',e=>{col=colFromEvent(e);ghostUpdate()});
+wrap.addEventListener('click',e=>{if(isAI(turn))return;col=colFromEvent(e);play(col)});
+addEventListener('keydown',e=>{
+ if(e.key==='ArrowLeft'){col=Math.max(0,col-1);ghostUpdate();e.preventDefault()}
+ else if(e.key==='ArrowRight'){col=Math.min(C-1,col+1);ghostUpdate();e.preventDefault()}
+ else if(e.key==='Enter'||e.key===' '||e.key==='ArrowDown'){if(!isAI(turn))play(col);e.preventDefault()}
+ else if(/^[1-7]$/.test(e.key)&&!isAI(turn)){col=+e.key-1;play(col)}
+});
+$('ng').onclick=newGame;$('mode').onchange=newGame;$('diff').onchange=newGame;$('first').onchange=newGame;
+newGame();
+</script><style>#__home{position:fixed;top:0;left:50%;transform:translateX(-50%);width:64px;height:22px;z-index:99999;display:none;align-items:flex-start;justify-content:center;text-decoration:none}
+#__home i{display:block;width:40px;height:15px;border-radius:0 0 10px 10px;background:rgba(120,130,150,.55);color:#fff;font:600 11px/15px system-ui;text-align:center;font-style:normal}
+@media (display-mode:standalone){#__home{display:flex}}</style>
+<a id="__home" href="./" aria-label="Back to games"><i>⌂ Home</i></a>
+<script>if(window.navigator.standalone)document.getElementById('__home').style.display='flex'</script>
+</body></html>

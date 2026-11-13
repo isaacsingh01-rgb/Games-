@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Games</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Games"><meta name="theme-color" content="#0f172a">
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,sans-serif;padding:max(20px,env(safe-area-inset-top)) 18px 30px;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{margin:10px 0 4px}#st{font-size:13px;opacity:.7;margin-bottom:18px;min-height:18px}#st.ok{color:#86efac;opacity:1}
+.g{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;width:min(100%,440px)}
+a{background:#1e293b;border:1px solid #334155;border-radius:14px;padding:22px 10px;text-align:center;color:inherit;text-decoration:none;font-weight:700;font-size:18px;transition:transform .12s,background .15s}
+a span{display:block;font-size:34px;margin-bottom:6px}a:active{transform:scale(.95);background:#334155}
+</style></head><body>
+<h1>Games</h1><div id="st">Preparing offline copy…</div>
+<div class="g">
+<a href="solitaire.html"><span>🃏</span>Solitaire</a><a href="tetris.html"><span>🧱</span>Tetris</a>
+<a href="2048.html"><span>🔢</span>2048</a><a href="snake.html"><span>🐍</span>Snake</a>
+<a href="minesweeper.html"><span>💣</span>Minesweeper</a><a href="sudoku.html"><span>🧩</span>Sudoku</a>
+<a href="wordle.html"><span>🔤</span>Word Guess</a><a href="connect4.html"><span>🔴</span>Connect 4</a></div>
+<script>
+const st=document.getElementById('st');
+function ok(){st.textContent='✓ Saved for offline play';st.className='ok'}
+if('serviceWorker' in navigator){
+ navigator.serviceWorker.register('sw.js').then(()=>navigator.serviceWorker.ready).then(()=>{ok()}).catch(()=>{st.textContent='Offline mode needs https (GitHub Pages)'});
+}else st.textContent='Offline mode needs https (GitHub Pages)';
+</script></body></html>
